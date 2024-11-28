@@ -1,0 +1,224 @@
+create or replace FUNCTION obterIntroParcelas
+    RETURN SYS_REFCURSOR AS
+    listIntroParcelas SYS_REFCURSOR;
+BEGIN
+    OPEN listIntroParcelas FOR
+        SELECT DISTINCT nomeParcela
+        FROM parcela
+        ORDER BY nomeParcela;
+    RETURN listIntroParcelas;
+END;
+/
+-------------------------------------------------------------------------------------------------------------------
+
+create or replace FUNCTION obterListaUnidade
+    RETURN SYS_REFCURSOR AS
+    listaUnidades SYS_REFCURSOR;
+BEGIN
+    OPEN listaUnidades FOR
+        SELECT designacaoUnidade
+        FROM tipoUnidade
+        ORDER BY designacaoUnidade;
+    RETURN listaUnidades;
+END;
+/
+
+-------------------------------------------------------------------------------------------------------------------
+
+create or replace FUNCTION obterIntroCulturas
+    RETURN SYS_REFCURSOR AS
+    listIntroCulturas SYS_REFCURSOR;
+BEGIN
+    OPEN listIntroCulturas FOR
+        SELECT DISTINCT (NOMECOMUM || ' ' || VARIEDADE || ' | ' || DESIGNACAOTIPOPERMANENCIA) AS cultura
+        FROM planta
+        ORDER BY cultura;
+    RETURN listIntroCulturas;
+END;
+/
+
+-------------------------------------------------------------------------------------------------------------------
+
+create or replace FUNCTION novoIdOperacao
+    RETURN NUMBER AS
+    newIdOperation NUMBER;
+BEGIN
+    SELECT NVL(MAX(idOperacao), 0) + 1 INTO newIdOperation
+    FROM operacao;
+    RETURN newIdOperation;
+END;
+/
+
+-------------------------------------------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------------------------------------------
+
+create or replace FUNCTION verificarSeOperacaoExiste(
+    desigOp IN tipoOperacaoAgricola.designacaoOperacaoAgricola%TYPE,
+    desigUnidade IN tipoUnidade.designacaoUnidade%TYPE,
+    qtd IN NUMBER,
+    dataOp IN DATE,
+    nomeParcela IN parcela.nomeParcela%TYPE,
+    nomeComum IN culturainstalada.nomeComum%TYPE,
+    variedade IN culturainstalada.variedade%TYPE
+) RETURN NUMBER IS
+    found NUMBER := 0;
+BEGIN
+    BEGIN
+        SELECT NVL(COUNT(*), 0) INTO found
+        FROM OPERACAO op
+                 INNER JOIN operacaoCultura cul ON op.idOperacao = cul.idOperacao
+        WHERE op.designacaooperacaoagricola = desigOp
+          AND op.dataoperacao = dataOp
+          AND op.designacaounidade = desigUnidade
+          AND op.quantidade = qtd
+          AND cul.nomeComum = nomeComum
+          AND cul.variedade = variedade
+          AND cul.nomeParcela = nomeParcela;
+    EXCEPTION
+        WHEN OTHERS THEN
+            found := 0;
+    END;
+    RETURN found;
+END;
+/
+-------------------------------------------------------------------------------------------------------------------
+
+create or replace FUNCTION registarOperacaoRega(
+    desigOp IN tipoOperacaoAgricola.designacaoOperacaoAgricola%TYPE,
+    desigUnidade IN tipoUnidade.designacaoUnidade%TYPE,
+    qtd IN NUMBER,
+    dataOp IN DATE,
+    idSetor IN setor.idsetor%TYPE
+) RETURN NUMBER IS
+    success          NUMBER := 0;
+    idOp             NUMBER;
+    plantaInfoCursor SYS_REFCURSOR;
+    dataInicio       DATE;
+    nomeParcela      varchar2(50);
+    nomeComum        varchar2(50);
+    variedade        varchar2(50);
+    semCulturas      EXCEPTION;
+BEGIN
+    BEGIN
+
+        plantaInfoCursor := obterInfoPlantaSetor(idSetor);
+
+        FETCH plantaInfoCursor INTO nomeParcela, nomeComum, variedade, dataInicio;
+
+        IF plantaInfoCursor%ROWCOUNT != 0 THEN
+
+            LOOP
+                idOp := novoIdOperacao();
+
+                INSERT INTO operacao(IDOPERACAO, DESIGNACAOOPERACAOAGRICOLA, DESIGNACAOUNIDADE, QUANTIDADE,
+                                     DATAOPERACAO)
+                VALUES (idOp, desigOp, desigUnidade, qtd, dataOp);
+
+                INSERT INTO OperacaoCultura (IDOPERACAO, NOMEPARCELA, DATAINICIAL, NOMECOMUM, VARIEDADE)
+                VALUES (idOp, nomeParcela, dataInicio, nomeComum, variedade);
+
+                INSERT INTO rega(idOperacao, designacaoSetor)
+                VALUES (idOp, idSetor);
+
+                FETCH plantaInfoCursor INTO nomeParcela, nomeComum, variedade, dataInicio;
+
+                EXIT WHEN plantaInfoCursor%NOTFOUND;
+
+            END LOOP;
+
+            success := 1;
+
+        ELSE
+            RAISE semCulturas;
+        END IF;
+
+    EXCEPTION
+        WHEN semCulturas THEN
+            success := 0;
+            RAISE_APPLICATION_ERROR(-20001, 'Não existem culturas instaladas definidas para o setor escolhido.');
+            ROLLBACK;
+    END;
+
+    RETURN success;
+END;
+/
+
+--------------------------------------------------------------------------
+create or replace FUNCTION obterInfoPlantaSetor(
+    idSetor IN setor.idsetor%TYPE
+) RETURN SYS_REFCURSOR IS
+    infoPlanta SYS_REFCURSOR;
+BEGIN
+    OPEN infoPlanta FOR
+        SELECT NOMEPARCELA, NOMECOMUM, VARIEDADE, DATAINICIALCULTURAINSTALADA
+        FROM SETORCULTURAINSTALADA
+        WHERE DESIGNACAO = idSetor;
+    RETURN infoPlanta;
+END;
+/
+
+-------------------------------------------------------------------------------------------------------------------
+create or replace NONEDITIONABLE function obterCulturasValidasDeParcela( p_nomeParcela in CulturaInstalada.nomeParcela%TYPE) return SYS_REFCURSOR
+is
+    cultures SYS_REFCURSOR;
+begin
+    BEGIN
+        open cultures for
+            Select distinct p.nomeComum, p.variedade
+            from planta p
+            inner join culturaInstalada ci
+                  on ci.nomeComum = p.nomeComum
+                  and ci.variedade = p.variedade
+            where ci.nomeParcela = p_nomeParcela;
+    exception
+        when no_data_found then
+            return null;
+    end;
+    return cultures;
+end;
+/
+
+--------------------------------------------------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION obterIntroProdutos(p_variedade IN CulturaInstalada.variedade%TYPE,
+                                              p_nomeComum IN CulturaInstalada.nomeComum%TYPE)
+RETURN SYS_REFCURSOR
+    IS
+        products SYS_REFCURSOR;
+BEGIN
+    BEGIN
+        OPEN products for
+            SELECT DISTINCT pr.nomeProduto
+                FROM Planta p
+                INNER JOIN Producao pr ON p.nomeComum = pr.nomeComum AND P.variedade = pr.variedade
+                WHERE p.variedade = p_variedade
+                  AND p.nomeComum = p_nomeComum;
+    EXCEPTION
+    WHEN no_data_found THEN
+        RETURN NULL;
+    END;
+    RETURN products;
+END;
+/
+
+-------------------------------------------------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION obterTipoPermanencia(p_variedade IN CulturaInstalada.variedade%TYPE,
+                                              p_nomeComum IN CulturaInstalada.nomeComum%TYPE)
+RETURN SYS_REFCURSOR
+    IS
+        v_designacao_tipo_permanencia SYS_REFCURSOR;
+BEGIN
+    BEGIN
+        OPEN v_designacao_tipo_permanencia FOR
+            SELECT DISTINCT p.designacaoTipoPermanencia
+                FROM Planta p
+                WHERE p.variedade = p_variedade
+                  AND p.nomeComum = p_nomeComum;
+
+    EXCEPTION
+        WHEN no_data_found THEN
+            RETURN NULL;
+END;
+ RETURN v_designacao_tipo_permanencia;
+ END;
+/

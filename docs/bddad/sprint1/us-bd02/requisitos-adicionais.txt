@@ -1,0 +1,6 @@
+REQUISITOS NÃO REPRESENTADOS NO MODELO RELACIONAL
+
+1.	Para operações que só mencionam nome comum de uma cultura deve ser considerado todas as culturas instaladas, na parcela em questão, que contenham o nome comum.
+2.	Uma cultura não pode ser plantada mais do que uma vez, numa dada parcela, no mesmo dia.
+3.  Uma operação registada na tabela OperacaoCultura não pode ser registada em OperacaoParcela, e vice-versa.
+4.  Uma operação não pode ser registada em OperacaoCultura e OperacaoParcela se não for registada previamente em Operacao.

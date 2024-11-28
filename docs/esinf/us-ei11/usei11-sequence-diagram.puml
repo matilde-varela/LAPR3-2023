@@ -1,0 +1,92 @@
+@startuml
+skinparam monochrome true
+skinparam packageStyle rectangle
+skinparam shadowing false
+
+autonumber
+
+'hide footbox
+actor "User" as User
+participant ":ImportarFicherioUI" as UI
+participant ":ImportarFicherioController" as CTRL
+participant "importarFicheiro\n: ImportarFicheiro" as IMPOR
+participant "excessaoFicheiro\n: ExcessaoFicheiro" as EXCE
+participant "horario\n: Horario" as HOR
+participant "local\n: Local" as LOC
+
+
+
+
+activate User
+
+    User -> UI : pede para importar os novos horarios
+    activate UI
+
+    UI -> User : pede o filepath do ficheiro com os novos horarios
+    deactivate UI
+
+    User -> UI : fornece o filepath
+    activate UI
+
+    UI -> CTRL** : create
+
+    UI -> CTRL : importarFicheiroHorarios(horariosFilePath, novosHorarios)
+    activate CTRL
+
+        CTRL -> IMPOR : importarFicheiroHorarios(ficheiro, novosHorarios)
+        activate IMPOR
+
+         IMPOR -> EXCE : verificarFicheiro(ficheiro, fileType)
+         activate EXCE
+
+         EXCE -> IMPOR
+         deactivate EXCE
+
+         IMPOR -> EXCE : verificarFicheiroHorarios(ficheiro)
+         activate EXCE
+
+         EXCE -> IMPOR
+         deactivate EXCE
+
+         loop para todas as linhas do ficherio
+
+                IMPOR -> HOR** : create
+
+                  |||
+         end loop
+
+        IMPOR -> CTRL : result
+        deactivate IMPOR
+
+        CTRL -> UI : result
+        deactivate CTRL
+
+        loop todos os Hubs do ficheiro
+        |||
+            alt localidade é hub & hub existe
+                UI -> CTRL : setHorario(novoHorario)
+                activate CTRL
+
+                CTRL -> LOC : setHorario(novoHorario)
+                activate LOC
+
+                LOC -> CTRL
+                deactivate LOC
+
+                CTRL -> UI
+                deactivate CTRL
+
+
+                |||
+            end alt
+            |||
+        end loop
+
+
+        UI -> User : mostra em quais os hubs ocorreu mudança de horário e dá erro naqueles \n em que não ocorreu mudança
+
+
+
+deactivate User
+
+@enduml
